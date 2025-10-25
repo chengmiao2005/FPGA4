@@ -1,0 +1,94 @@
+#!/bin/bash
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+DEFAULT_INCLUDE_DIR="$SCRIPT_DIR"
+
+if [ $# -eq 0 ]; then
+    INCLUDE_DIR="$DEFAULT_INCLUDE_DIR"
+    echo "NOTE: Using script directory: $INCLUDE_DIR"
+else
+    INCLUDE_DIR="$1"
+    if [ ! -d "$INCLUDE_DIR" ]; then
+        echo "Error: '$INCLUDE_DIR' does not exist"
+        exit 1
+    fi
+fi
+
+echo "Start simulation..."
+echo "Include directories used: $INCLUDE_DIR"
+
+if [ ! -f "simulator.cpp" ]; then
+    echo "Error: simulator.cpp does not exist"
+    exit 1
+fi
+
+if [ ! -f "DevelopmentBoard.v" ]; then
+    echo "Error: DevelopmentBoard.v does not exist"
+    exit 1
+fi
+
+echo "---------------------------------"
+echo "Step 0: Clean up previously generated files..."
+OBJ_DIR="obj_dir"
+
+if [ -d "$OBJ_DIR" ]; then
+    echo "Remove $OBJ_DIR ..."
+    if rm -rf "$OBJ_DIR"; then
+        echo "✓ Successfully remove $OBJ_DIR"
+    else
+        echo "Warning: Problem encountered while deleting $OBJ_DIR folder"
+    fi
+else
+    echo "Tip: The $OBJ_DIR folder does not exist"
+fi
+
+echo "---------------------------------"
+echo "Step 1: Run Verilator Compiler..."
+
+# 编译所有必要的文件
+VERILATOR_OUTPUT=$(verilator -Wall --cc --exe -I"$INCLUDE_DIR" \
+    simulator.cpp \
+    DevelopmentBoard.v \
+    top_vga_controller.v \
+    vga_color_bar.v \
+    vga_must.v \
+    vga_end.v \
+    clk_divider.v \
+    vga_timing.v \
+    -LDFLAGS "-lglut -lGLU -lGL -lpthread")
+
+VERILATOR_EXIT_CODE=$?
+
+echo "$VERILATOR_OUTPUT"
+
+if [ ! -f "obj_dir/VDevelopmentBoard.mk" ]; then
+    echo "Error: Verilator compilation failed!"
+    exit 1
+fi
+
+echo "✓ Verilator compilation completed successfully!"
+
+echo "---------------------------------"
+echo "Step 2: Build the simulation executable..."
+make -j -C obj_dir -f VDevelopmentBoard.mk VDevelopmentBoard
+
+if [ $? -ne 0 ]; then
+    echo "Error: Make build failed!"
+    exit 1
+fi
+
+echo "✓ Simulation executable file built successfully!"
+
+echo "---------------------------------"
+echo "Step 3: Start the simulation..."
+echo "----------------------------------------"
+obj_dir/VDevelopmentBoard
+
+SIMULATION_EXIT_CODE=$?
+echo "----------------------------------------"
+
+if [ $SIMULATION_EXIT_CODE -ne 0 ]; then
+    echo "WARNING: Simulation execution exit code: $SIMULATION_EXIT_CODE"
+else
+    echo "✓ Simulation execution completed!"
+fi
